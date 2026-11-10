@@ -2,8 +2,14 @@
 /** @jsxFrag Fragment */
 import { escapeHtml, h, Raw, render, VNode } from "./tsx.ts";
 import { Post as PostData } from "./main.ts";
-import { FeedEntry as FeedEntryData } from "./blogroll.ts";
-import { site_email, site_github, site_name, site_repo, site_url } from "./site.ts";
+import {
+  site_author,
+  site_email,
+  site_github,
+  site_name,
+  site_repo,
+  site_url,
+} from "./site.ts";
 
 const blurb = `${site_name} blog`;
 
@@ -69,8 +75,8 @@ function Base({ children, src, title, path, description, extra_css, className }:
         {site_url && <link rel="canonical" href={`${site_url}${path}`} />}
         <link
           rel="alternate"
-          type="application/rss+xml"
-          title={site_name}
+          type="application/atom+xml"
+          title={`${site_name} feed`}
           href={`${site_url}/feed.xml`}
         />
         <Fonts />
@@ -93,12 +99,12 @@ function Base({ children, src, title, path, description, extra_css, className }:
         <footer>
           <p>
             {site_repo && (
-              <a href={`${site_repo}/edit/master${src}`}>Fix typo</a>
+              <a href={`${site_repo}/edit/main${src}`}>Fix typo</a>
             )}
 
             <a href="/feed.xml">
               <FooterIcon name="rss" />
-              Subscribe
+              <span data-feed-label aria-live="polite">Subscribe</span>
             </a>
 
             <a href="/">All posts</a>
@@ -118,6 +124,24 @@ function Base({ children, src, title, path, description, extra_css, className }:
             )}
           </p>
         </footer>
+
+        <script>
+          <Raw unsafe={`
+            const feedLink = document.querySelector('[data-feed-label]')?.closest('a');
+            feedLink?.addEventListener('click', async (event) => {
+              event.preventDefault();
+              try {
+                await navigator.clipboard.writeText(feedLink.href);
+                const label = feedLink.querySelector('[data-feed-label]');
+                const previous = label.textContent;
+                label.textContent = 'Copied!';
+                window.setTimeout(() => { label.textContent = previous; }, 1800);
+              } catch {
+                window.location.assign(feedLink.href);
+              }
+            });
+          `} />
+        </script>
       </body>
     </html>
   );
@@ -196,31 +220,6 @@ export function Post({ post }: { post: PostData }) {
   );
 }
 
-export function BlogRoll({ posts }: { posts: FeedEntryData[] }) {
-  function domain(url: string): string {
-    return new URL(url).host;
-  }
-
-  const list_items = posts.map((post) => (
-    <li>
-      <span class="meta">
-        <Time date={post.date} />, {domain(post.url)}
-      </span>
-      <h2>
-        <a href={post.url}>{post.title}</a>
-      </h2>
-    </li>
-  ));
-
-  return (
-    <Base path="" title={site_name} description={blurb} src="/src/templates.tsx">
-      <ul class="post-list">
-        {list_items}
-      </ul>
-    </Base>
-  );
-}
-
 function Time(
   { date, className = undefined }: { date: Date; className?: string },
 ) {
@@ -241,6 +240,51 @@ export function time_html(date: Date, className: string) {
   return render(<Time date={date} className={className} />);
 }
 
+export function feed_xml(posts: PostData[]): string {
+  return html_ugly(
+    Feed({ posts }),
+    `<?xml version="1.0" encoding="utf-8"?>`,
+  );
+}
+
+function Feed({ posts }: { posts: PostData[] }) {
+  const latest = posts[0]?.date ?? new Date();
+  const entries = posts.slice(0, 10).map((post) => FeedEntry({ post }));
+
+  return (
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <id>{`${site_url}/feed.xml`}</id>
+      <updated>{latest.toISOString()}</updated>
+      <title>{site_name}</title>
+      <subtitle>{blurb}</subtitle>
+      <link href={`${site_url}/feed.xml`} rel="self" type="application/atom+xml" />
+      <link href={site_url} rel="alternate" type="text/html" />
+      <author><name>{site_author}</name></author>
+      {entries}
+    </feed>
+  );
+}
+
+function FeedEntry({ post }: { post: PostData }) {
+  const url = `${site_url}${post.path}`;
+  return (
+    <entry>
+      <id>{url.replace(/\.html$/, "")}</id>
+      <title>{post.title}</title>
+      <updated>{yyyy_mm_dd(post.date)}T00:00:00Z</updated>
+      <published>{yyyy_mm_dd(post.date)}T00:00:00Z</published>
+      <link href={url} rel="alternate" type="text/html" />
+      <author><name>{site_author}</name></author>
+      <summary type="html">
+        <Raw unsafe={`<![CDATA[${post.summary}]]>`} />
+      </summary>
+      <content type="html" xml:base={url}>
+        <Raw unsafe={`<![CDATA[${post.content.value}]]>`} />
+      </content>
+    </entry>
+  );
+}
+
 export function Redirect({ path }: { path: string }) {
   return (
     <html lang="en-US">
@@ -255,62 +299,6 @@ export function Redirect({ path }: { path: string }) {
       <h1>Redirecting…</h1>
       <a href={path}>Click here if you are not redirected.</a>
     </html>
-  );
-}
-
-export function feed_xml(posts: PostData[]): string {
-  return html_ugly(
-    Feed({ posts }),
-    `<?xml version="1.0" encoding="utf-8"?>`,
-  );
-}
-
-function Feed({ posts }: { posts: PostData[] }) {
-  const entries = posts.slice(0, 10).map((post) => FeedEntry({ post }));
-
-  return (
-    <feed xmlns="http://www.w3.org/2005/Atom">
-      <link
-        href={`${site_url}/feed.xml`}
-        rel="self"
-        type="application/atom+xml"
-      />
-      <link href={site_url || "/"} rel="alternate" type="text/html" />
-      <updated>{new Date().toISOString()}</updated>
-      <id>{`${site_url}/feed.xml`}</id>
-      <title type="html">{site_name}</title>
-      <subtitle>{blurb}</subtitle>
-      <author>
-        <name>{site_name}</name>
-      </author>
-      {entries}
-    </feed>
-  );
-}
-
-function FeedEntry({ post }: { post: PostData }) {
-  return (
-    <entry>
-      <title type="text">{post.title}</title>
-      <link
-        href={`${site_url}${post.path}`}
-        rel="alternate"
-        type="text/html"
-        title={post.title}
-      />
-      <published>{yyyy_mm_dd(post.date)}T00:00:00+00:00</published>
-      <updated>{yyyy_mm_dd(post.date)}T00:00:00+00:00</updated>
-      <id>{`${site_url}${post.path.replace(".html", "")}`}</id>
-      <author>
-        <name>{site_name}</name>
-      </author>
-      <summary type="html">
-        <Raw unsafe={`<![CDATA[${post.summary}]]>`} />
-      </summary>
-      <content type="html" xml:base={`${site_url}${post.path}`}>
-        <Raw unsafe={`<![CDATA[${post.content.value}]]>`} />
-      </content>
-    </entry>
   );
 }
 

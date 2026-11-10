@@ -3,6 +3,7 @@ import {
   mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile,
 } from "node:fs/promises";
 import { dirname as path_dirname, join } from "node:path";
+import { site_base_path } from "./site.ts";
 const args = Bun.argv.slice(2);
 function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
   let timer: ReturnType<typeof setTimeout>;
@@ -12,22 +13,18 @@ function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): T {
   }) as T;
 }
 import * as djot from "./djot.ts";
-import * as blogroll from "./blogroll.ts";
 import {
-  BlogRoll,
   feed_xml,
   html_ugly,
   HtmlString,
   Page,
   Post,
   PostList,
-  Redirect,
 } from "./templates.tsx";
 import { spell } from "./spell.ts";
 
 async function main() {
   const params = {
-    blogroll: false,
     update: false,
     spell: false,
     profile: false,
@@ -69,10 +66,6 @@ async function main() {
         i++;
         break;
       }
-      case "--blogroll": {
-        params.blogroll = true;
-        break;
-      }
       default:
         fatal(`unexpected argument: ${args[i]}`);
     }
@@ -101,7 +94,6 @@ async function watch(params: { filter: string; profile: boolean }) {
       console.log(`rebuild #${build_id}`);
       build_id += 1;
       await build({
-        blogroll: false,
         update: true,
         spell: false,
         profile: params.profile || false,
@@ -135,7 +127,6 @@ class Ctx {
 }
 
 async function build(params: {
-  blogroll: boolean;
   update: boolean;
   spell: boolean;
   profile: boolean;
@@ -169,14 +160,6 @@ async function build(params: {
     );
   }
 
-  if (params.blogroll) {
-    const blogroll_posts = await blogroll.blogroll();
-    await update_file(
-      "out/www/blogroll.html",
-      html_ugly(BlogRoll({ posts: blogroll_posts })),
-    );
-  }
-
   const pages = ["about", "resume", "links", "style"];
   for (const page of pages) {
     const text = await readFile(`content/${page}.dj`, "utf8");
@@ -190,17 +173,6 @@ async function build(params: {
     );
   }
 
-  const redirects = [
-    ["/2024/09/32/-what-is-io-uring.html", "/2024/09/23/what-is-io-uring.html"],
-  ];
-
-  for (const [from, to] of redirects) {
-    await update_file(
-      `out/www/${from}`,
-      html_ugly(Redirect({ path: to })),
-    );
-  }
-
   const paths = [
     "favicon.svg",
     "css/*",
@@ -210,6 +182,8 @@ async function build(params: {
   for (const path of paths) {
     await update_path(path);
   }
+
+  await rewrite_site_paths("./out/www", site_base_path);
 
 
   ctx.total_ms = performance.now() - t;
@@ -222,6 +196,31 @@ async function build(params: {
       profile += `${key.slice(0, key.length - 3)}=${ctx[key].toFixed(2)}ms`;
     }
     console.log(profile);
+  }
+}
+
+async function rewrite_site_paths(root: string, base_path: string): Promise<void> {
+  if (!base_path) return;
+  const prefix_path = (value: string) =>
+    value === base_path || value.startsWith(`${base_path}/`)
+      ? value
+      : `${base_path}${value}`;
+
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      await rewrite_site_paths(path, base_path);
+    } else if (entry.isFile() && /\.(?:html|css|xml)$/i.test(entry.name)) {
+      const content = await readFile(path, "utf8");
+      const rewritten = content
+        .replace(/((?:href|src)=["'])(\/[^"']*)/g, (_whole, prefix, value) =>
+          `${prefix}${prefix_path(value)}`
+        )
+        .replace(/url\((["']?)(\/[^)"']*)/g, (_whole, quote, value) =>
+          `url(${quote}${prefix_path(value)}`
+        );
+      if (rewritten !== content) await writeFile(path, rewritten);
+    }
   }
 }
 

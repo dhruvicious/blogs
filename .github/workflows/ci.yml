@@ -2,25 +2,38 @@ name: CI
 on:
   push:
     branches:
-      - master
-
-  schedule:
-    - cron: "0 0 * * *" # Daily at midnight.
+      - main
+  workflow_dispatch:
 
 jobs:
   CI:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: true
 
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+      - uses: actions/configure-pages@v5
+        id: pages
 
-      - run: bun run build --blogroll
+      - name: Build site
+        run: bun run build
+        env:
+          SITE_URL: ${{ steps.pages.outputs.base_url }}
+          SITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: ./out/www
-      - uses: actions/deploy-pages@v4
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
