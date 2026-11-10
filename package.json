@@ -1,0 +1,13 @@
+{
+  "name": "dhruvicious-blogs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run src/main.ts build --profile",
+    "watch": "rm -rf ./out && bun run --watch src/main.ts watch",
+    "open": "live-server --host 127.0.0.1 --port 8080 ./out/www & open 'http://127.0.0.1:8080'",
+    "serve": "bun run watch & bun run open",
+    "touch": "bun run src/main.ts touch",
+    "spell": "bun run src/main.ts spell"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "jsx": "react",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+    "baseUrl": ".",
+    "paths": {
+      "@highlightjs/*": ["vendor/unpkg.com/@highlightjs/cdn-assets@11.6.0/es/*"],
+      "@djot/*": ["vendor/raw.githubusercontent.com/jgm/#djot.js_af886/@djot/djot@0.3.2/src/*"],
+      "@rss": ["vendor/raw.githubusercontent.com/#mikaelporttila_0c368/rss/refs/tags/1.0.3/mod.ts"]
+    }
+  }
+}
